@@ -2,7 +2,19 @@
 
 سناریو: سرویس روی سرور خارج، آدرس 127.0.0.1:8080 فعاله؛ می‌خوای کاربر با IP ایران و پورت 18080 بهش برسه. اینجا ایران نقش server داره و خارج نقش client. هر دو طرف باید همین نسخهٔ Rust باشن؛ با کور اصلی DaggerConnect جفت نمی‌شه.
 
-روی هر دو سرور Ubuntu/Debian با systemd و معماری x86-64، فایل dagger-rs-linux-x86_64.run رو بذار و بزن:
+روی هر دو سرور Ubuntu/Debian با systemd و معماری x86-64، این یک خط منو را همان‌جا باز می‌کند:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/khodehamed/dagger-rs/main/install.sh | sudo bash
+```
+
+اگر ترمینال در کار نباشد، نصب تمام می‌شود و فقط می‌گوید منو را جدا باز کنید:
+
+```bash
+sudo dagger-setup
+```
+
+یا فایل dagger-rs-linux-x86_64.run را بگذارید و بزنید:
 
 ```bash
 sudo apt update

@@ -1,0 +1,4 @@
+install.sh text eol=lf
+dagger-setup text eol=lf
+howto-tunnel-fa.txt text eol=lf
+README.md text eol=lf
