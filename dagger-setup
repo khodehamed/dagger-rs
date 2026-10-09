@@ -809,13 +809,23 @@ def address_choice(role: str, transport: str, reverse: bool):
     return "Server address", default, False, ipv6
 
 
-def default_tcp_map() -> dict:
-    return {"type": "tcp", "bind": "0.0.0.0:18080", "target": "127.0.0.1:8080"}
+DEFAULT_FORWARD_PORTS = (443, 2053, 8443, 2083, 2087, 2096)
+
+
+def default_tcp_maps() -> list:
+    return [
+        {"type": "tcp", "bind": f"0.0.0.0:{port}", "target": f"127.0.0.1:{port}"}
+        for port in DEFAULT_FORWARD_PORTS
+    ]
+
+
+def default_targets() -> list:
+    return [f"127.0.0.1:{port}" for port in DEFAULT_FORWARD_PORTS]
 
 
 def ask_one_map(kind: str) -> dict:
     if kind == "tcp":
-        bind_default, target_default = "0.0.0.0:18080", "127.0.0.1:8080"
+        bind_default, target_default = "0.0.0.0:443", "127.0.0.1:443"
     else:
         bind_default, target_default = "0.0.0.0:15353", "127.0.0.1:5353"
     bind = ask_addr("Public address", bind_default, bind=True, ipv6=False)
@@ -824,8 +834,8 @@ def ask_one_map(kind: str) -> dict:
 
 
 def ask_port_numbers() -> dict:
-    public = ask_int("Public port on 0.0.0.0", 18080, 1, 65535)
-    service = ask_int("Service port on 127.0.0.1", 8080, 1, 65535)
+    public = ask_int("Public port on 0.0.0.0", 443, 1, 65535)
+    service = ask_int("Service port on 127.0.0.1", 443, 1, 65535)
     return {"type": "tcp", "bind": f"0.0.0.0:{public}", "target": f"127.0.0.1:{service}"}
 
 
@@ -833,7 +843,7 @@ def ask_maps() -> list:
     kind = choose(
         "Port map",
         [
-            ("default", "TCP  0.0.0.0:18080 -> 127.0.0.1:8080"),
+            ("default", "TCP one-to-one 443, 2053, 8443, 2083, 2087, 2096"),
             ("ports", "TCP, change the two ports"),
             ("custom", "TCP, type both addresses"),
             ("udp", "UDP map"),
@@ -841,10 +851,10 @@ def ask_maps() -> list:
             ("none", "No port map"),
         ],
         default=0,
-        preamble="Enter uses one TCP map. 2 changes the ports.",
+        preamble="Enter forwards these ports one-to-one to 127.0.0.1.\n443, 2053, 8443, 2083, 2087, 2096. The tunnel listener stays on 7000.",
     )
     if kind == "default":
-        return [default_tcp_map()]
+        return default_tcp_maps()
     if kind == "none":
         return []
     if kind == "ports":
@@ -893,23 +903,23 @@ def ask_targets() -> list:
     scope = choose(
         "Destinations",
         [
-            ("map", "127.0.0.1:8080, the default map service"),
+            ("map", "127.0.0.1 on 443, 2053, 8443, 2083, 2087, 2096"),
             ("other", "A different service address"),
             ("any", "Any destination (*)"),
         ],
         default=0,
-        preamble="Enter fills allowed_targets from the default port map.",
+        preamble="Enter allows the six default forwarded ports.",
     )
     if scope == "map":
-        return ["127.0.0.1:8080"]
+        return default_targets()
     if scope == "any":
         return ["*"]
     targets = []
     while True:
-        default = "127.0.0.1:8080" if not targets else None
+        default = "127.0.0.1:443" if not targets else None
         value = ask("Service address", default)
         if value != "*" and not valid_endpoint(value, bind=False):
-            warn("Type a destination like 127.0.0.1:8080.")
+            warn("Type a destination like 127.0.0.1:443.")
             continue
         targets.append(value)
         if not choose_yes("Add another service address?", False):

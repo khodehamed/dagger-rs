@@ -17,7 +17,7 @@ BRANCH="main"
 ASSET="files-to-upload/dagger-rs-linux-x86_64.run"
 SHA256="51d34306d901ea43ed5446ddee1dee5c345aabc212695246c1c5b9d1000d3f6f"
 MENU_ASSET="dagger-setup"
-MENU_SHA256="db5efd78f15d3a8781733b4e531ad3f5fd2c615137f2462e69face24780de959"
+MENU_SHA256="3a53470b634de1f3a77d6a271cf3516b2abbcdf803171be6dd5b80cf595afcd5"
 INSTALL_URL="https://cdn.jsdelivr.net/gh/${REPO}@${BRANCH}/install.sh"
 
 if [[ "$(uname -s)" != "Linux" ]]; then
