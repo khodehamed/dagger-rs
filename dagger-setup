@@ -51,22 +51,22 @@ OK = "\033[1;32m"
 LABEL = "\033[1;36m"
 
 MENU_ROWS = (
-    ("sec", "", "کلید"),
-    ("item", "1", "1   کلید عمومی این دستگاه"),
-    ("sec", "", "تنظیم"),
-    ("item", "2", "2   سرور یا کلاینت"),
-    ("item", "3", "3   بررسی    dagger-rs --check"),
-    ("sec", "", "سرویس"),
-    ("item", "4", "4   اجرا در پیش‌زمینه"),
-    ("item", "5", "5   نصب و شروع systemd"),
-    ("item", "6", "6   وضعیت سرویس"),
-    ("item", "7", "7   شروع دوباره"),
-    ("item", "8", "8   توقف سرویس"),
-    ("item", "9", "9   لاگ‌های اخیر"),
-    ("sec", "", "ابزار"),
-    ("item", "10", "10  گواهی TLS محلی"),
-    ("item", "11", "11  تست لینک با همتای مشخص"),
-    ("item", "0", "0   خروج"),
+    ("sec", "", "Keys"),
+    ("item", "1", "1   Public key on this machine"),
+    ("sec", "", "Setup"),
+    ("item", "2", "2   Server or client"),
+    ("item", "3", "3   Check    dagger-rs --check"),
+    ("sec", "", "Service"),
+    ("item", "4", "4   Run in the foreground"),
+    ("item", "5", "5   Install and start systemd"),
+    ("item", "6", "6   Service status"),
+    ("item", "7", "7   Restart"),
+    ("item", "8", "8   Stop the service"),
+    ("item", "9", "9   Recent logs"),
+    ("sec", "", "Tools"),
+    ("item", "10", "10  Local TLS certificate"),
+    ("item", "11", "11  Test a named peer link"),
+    ("item", "0", "0   Exit"),
 )
 
 
@@ -193,7 +193,7 @@ def section(title: str) -> None:
 
 
 def pause() -> None:
-    read_line(f"{DIM}  Enter برای بازگشت به منو.{RESET} ")
+    read_line(f"{DIM}  Press Enter to return to the menu.{RESET} ")
 
 
 def ask(label: str, default=None) -> str:
@@ -217,7 +217,7 @@ def ask_yes(label: str, default: bool = False) -> bool:
             return True
         if value in ("no", "n"):
             return False
-        warn("yes یا no بنویسید.")
+        warn("Type yes or no.")
 
 
 def ask_int(label: str, default: int, low: int, high: int) -> int:
@@ -227,19 +227,19 @@ def ask_int(label: str, default: int, low: int, high: int) -> int:
             number = int(raw, 10)
             if low <= number <= high:
                 return number
-        warn(f"یک عدد از {low} تا {high} بنویسید.")
+        warn(f"Type a number from {low} to {high}.")
 
 
 def ask_role():
-    emit(f"{SEC}  نقش: server (شنونده) یا client (وصل‌شونده){RESET}\n")
-    emit(f"{DIM}  خالی = بازگشت به منو{RESET}\n")
+    emit(f"{SEC}  Role: server (listens) or client (connects){RESET}\n")
+    emit(f"{DIM}  Empty = back to the menu{RESET}\n")
     while True:
         value = ask("server/client").lower()
         if value == "":
             return None
         if value in ("server", "client"):
             return value
-        warn("فقط server یا client.")
+        warn("Type server or client.")
 
 
 def is_root() -> bool:
@@ -250,7 +250,7 @@ def is_root() -> bool:
 def assert_safe(path: Path) -> None:
     text = str(path)
     if re.search(r"[\x00-\x1f]", text) or any(char in text for char in '"%$'):
-        print("مسیر نویسه غیرمجاز دارد.", file=sys.stderr)
+        print("Path contains a forbidden character.", file=sys.stderr)
         raise SystemExit(2)
 
 
@@ -282,7 +282,7 @@ def prepare_config_dir() -> Path:
         home,
     }
     if str(path) in forbidden:
-        print("یک پوشه اختصاصی برای تنظیمات انتخاب کنید.", file=sys.stderr)
+        print("Choose a dedicated directory for the config.", file=sys.stderr)
         raise SystemExit(2)
     path.mkdir(parents=True, exist_ok=True)
     try:
@@ -307,7 +307,7 @@ def find_binary() -> str:
         if candidate.is_file():
             assert_safe(candidate)
             return str(candidate)
-    print("فایل dagger-rs پیدا نشد. اول نصب را انجام دهید.", file=sys.stderr)
+    print("dagger-rs was not found. Install it first.", file=sys.stderr)
     raise SystemExit(1)
 
 
@@ -365,11 +365,11 @@ def ask_addr(label: str, default: str, bind: bool, ipv6: bool) -> str:
         if valid_endpoint(value, bind=bind, ipv6=ipv6):
             return value
         if ipv6:
-            warn("برای dc6 آدرس [IPv6]:port بنویسید.")
+            warn("For dc6, type an address as [IPv6]:port.")
         elif bind:
-            warn("آدرس IP:port بنویسید. IPv6 با براکت: [2001:db8::1]:7000")
+            warn("Type an address as IP:port. IPv6 uses brackets: [2001:db8::1]:7000")
         else:
-            warn("آدرس را مثل host:port یا [IPv6]:port بنویسید.")
+            warn("Type an address as host:port or [IPv6]:port.")
 
 
 def valid_key(value: str) -> bool:
@@ -393,19 +393,19 @@ def ensure_keys(role: str) -> bool:
     private = directory / "private.key"
     public = directory / "public.key"
     if private.is_file():
-        print(f"  کلید {role} از قبل هست. ساخته نشد.")
+        print(f"  {role} key already exists. Not created.")
     else:
         directory.mkdir(parents=True, exist_ok=True)
         code = run_bin(["keygen", "--out", str(directory)])
         if code != 0 or not public.is_file():
-            warn("ساخت کلید ناموفق بود.")
+            warn("Key generation failed.")
             return False
         chmod_private(private)
     if public.is_file():
         text = public.read_text(encoding="utf-8", errors="replace").strip()
-        print("  کلید عمومی (فقط همین را برای طرف مقابل بفرستید):")
+        print("  Public key (send only this to the other side):")
         print(f"  {text}")
-        print("  private.key روی همین دستگاه می‌ماند.")
+        print("  private.key stays on this machine.")
     return public.is_file()
 
 
@@ -449,7 +449,7 @@ def ask_transport() -> str:
         value = ask("transport", "tcp")
         if value in TRANSPORTS:
             return value
-        warn("یکی از transportهای بالا را بنویسید.")
+        warn("Type one of the transports above.")
 
 
 def ask_http_path() -> str:
@@ -457,31 +457,31 @@ def ask_http_path() -> str:
         path = ask("http_path", "/tunnel")
         if re.fullmatch(r"/[A-Za-z0-9_./~-]*", path):
             return path
-        warn("مسیر باید با / شروع شود و فقط نویسه ساده داشته باشد.")
+        warn("The path must start with / and use only simple characters.")
 
 
 def ask_xhttp(role: str, reverse: bool) -> dict:
     default_mode = "packet-up" if reverse else "stream-up"
     if reverse:
         if role == "server":
-            print("  این server منطقی به HTTP edge وصل می‌شود. map و socks همین‌جا می‌مانند.")
+            print("  This logical server dials the HTTP edge. maps and socks stay here.")
         else:
-            print("  این client منطقی به‌عنوان origin گوش می‌دهد. allowed_targets همین‌جا می‌ماند.")
+            print("  This logical client listens as the origin. allowed_targets stay here.")
     while True:
         mode = ask("xhttp mode (stream-up/packet-up/auto)", default_mode)
         if mode in ("stream-up", "packet-up", "auto"):
             break
-        warn("stream-up یا packet-up یا auto.")
+        warn("Type stream-up, packet-up, or auto.")
     options = {"mode": mode}
     dialer = (role == "client" and not reverse) or (role == "server" and reverse)
     if dialer:
         while True:
-            host = ask("HTTP Host / TLS SNI (خالی = آدرس همتا)", "")
+            host = ask("HTTP Host / TLS SNI (empty = peer address)", "")
             if host and not valid_authority(host):
-                warn("یک نام میزبان یا IP، شاید با پورت، بنویسید.")
+                warn("Type a hostname or IP, optionally with a port.")
                 continue
             if reverse and not host:
-                warn("در reverse نام دامنه‌ای که به origin می‌رسد لازم است.")
+                warn("Reverse needs the domain name that reaches the origin.")
                 continue
             if host:
                 options["host"] = host
@@ -495,30 +495,30 @@ def ask_tls(role: str, transport: str, reverse: bool, authority: str) -> dict:
     fields = {}
     if presents_certificate(role, reverse):
         while True:
-            certificate = ask("فایل cert.pem سرور")
-            key = ask("فایل key.pem سرور")
+            certificate = ask("Server cert.pem file")
+            key = ask("Server key.pem file")
             if place_file(certificate, directory / "cert.pem") and place_file(
                 key, directory / "key.pem", secret=True
             ):
                 break
-            warn("هر دو فایل PEM باید وجود داشته باشند.")
+            warn("Both PEM files must exist.")
         fields["cert_file"] = f"{role}-tls/cert.pem"
         fields["key_file"] = f"{role}-tls/key.pem"
         return fields
     if transport == "xhttps" and authority:
         name = authority_name(authority)
-        print(f"  TLS نام را از Host می‌گیرد: {name}")
+        print(f"  TLS name is taken from Host: {name}")
     else:
         while True:
-            name = ask("TLS server_name (نام گواهی)")
+            name = ask("TLS server_name (certificate name)")
             if re.fullmatch(r"[A-Za-z0-9_.:-]+", name or ""):
                 break
-            warn("نام TLS نامعتبر است.")
+            warn("TLS name is invalid.")
     while True:
-        certificate = ask("فایل PEM اعتماد (ca_file)")
+        certificate = ask("Trust PEM file (ca_file)")
         if place_file(certificate, directory / "ca.pem"):
             break
-        warn("فایل گواهی اعتماد پیدا نشد.")
+        warn("Trust certificate file was not found.")
     fields["server_name"] = name
     fields["ca_file"] = f"{role}-tls/ca.pem"
     return fields
@@ -537,43 +537,43 @@ def valid_ipv4(value: str, allow_empty: bool = False) -> bool:
 
 
 def ask_raw(role: str) -> dict:
-    print("  بسته خام: peer واقعی، اینترفیس و پورت بیرونی.")
+    print("  Raw packet: real peer, interface, and outer port.")
     while True:
         profile = ask("raw profile (tcp/udp/icmp/gre/ipip/bip/raw)", "tcp")
         if profile in ("tcp", "udp", "icmp", "gre", "ipip", "bip", "raw"):
             break
-        warn("یکی از profileهای بالا را بنویسید.")
+        warn("Type one of the profiles above.")
     peer_role = "client" if role == "server" else "server"
     while True:
-        peer = ask(f"IPv4 واقعی {peer_role}")
+        peer = ask(f"Real {peer_role} IPv4")
         if valid_ipv4(peer):
             break
-        warn("یک IPv4 یک‌طرفه (unicast) بنویسید.")
+        warn("Type a unicast IPv4 address.")
     while True:
-        local_ip = ask("IPv4 محلی (خالی = از مسیر)", "")
+        local_ip = ask("Local IPv4 (empty = from the route)", "")
         if valid_ipv4(local_ip, allow_empty=True):
             break
-        warn("IPv4 محلی نامعتبر است.")
+        warn("Local IPv4 is invalid.")
     while True:
-        interface = ask("اینترفیس (خالی = از مسیر)", "")
+        interface = ask("Interface (empty = from the route)", "")
         if re.fullmatch(r"[A-Za-z0-9_.-]{0,15}", interface):
             break
-        warn("نام اینترفیس نامعتبر است.")
-    port = ask_int("پورت بیرونی (هر دو طرف یکی)", 443, 1, 65535)
+        warn("Interface name is invalid.")
+    port = ask_int("Outer port (same on both sides)", 443, 1, 65535)
     while True:
         mode = ask("IP mode (normal/spoof/dcpi)", "normal")
         if mode in ("normal", "spoof", "dcpi"):
             break
-        warn("normal یا spoof یا dcpi.")
+        warn("Type normal, spoof, or dcpi.")
     source = ""
     dest = ""
     if mode == "spoof":
         while True:
-            source = ask("spoof_src_ip (خالی = واقعی)", "")
-            dest = ask("spoof_dst_ip (خالی = همتا)", "")
+            source = ask("spoof_src_ip (empty = real)", "")
+            dest = ask("spoof_dst_ip (empty = peer)", "")
             if valid_ipv4(source, allow_empty=True) and valid_ipv4(dest, allow_empty=True):
                 break
-            warn("آدرس spoof باید IPv4 یک‌طرفه باشد.")
+            warn("Spoof addresses must be unicast IPv4.")
     raw = {
         "profile": profile,
         "peer_ip": peer,
@@ -609,14 +609,14 @@ def carrier_fields(role: str, transport: str, reverse: bool) -> dict:
 
 def ask_forwarding(transport: str) -> str:
     default = "tun" if transport == "tun" else "ports"
-    print("  forwarding: ports (فوروارد پورت)  tun  tun+ports")
+    print("  forwarding: ports (port forward)  tun  tun+ports")
     while True:
         mode = ask("forwarding", default)
         if mode not in ("ports", "tun", "tun+ports"):
-            warn("ports یا tun یا tun+ports.")
+            warn("Type ports, tun, or tun+ports.")
             continue
         if transport == "tun" and mode == "ports":
-            warn("حامل tun فقط با tun یا tun+ports کار می‌کند.")
+            warn("The tun carrier only works with tun or tun+ports.")
             continue
         return mode
 
@@ -631,27 +631,27 @@ def valid_tun_ip(value: str) -> bool:
 
 def ask_tun(role: str, forwarding: str) -> dict:
     while True:
-        name = ask("نام اینترفیس tun", "dagger0")
+        name = ask("tun interface name", "dagger0")
         if re.fullmatch(r"[A-Za-z0-9_-]{1,15}", name):
             break
-        warn("نام tun باید ۱ تا ۱۵ حرف، عدد، _ یا - باشد.")
+        warn("The tun name must be 1 to 15 letters, digits, _ or -.")
     if role == "server":
         default_ip, default_peer = "10.77.0.1", "10.77.0.2"
     else:
         default_ip, default_peer = "10.77.0.2", "10.77.0.1"
     while True:
-        local_ip = ask("IP محلی tun (بدون prefix)", default_ip)
-        peer_ip = ask("IP همتای tun (بدون prefix)", default_peer)
+        local_ip = ask("Local tun IP (no prefix)", default_ip)
+        peer_ip = ask("Peer tun IP (no prefix)", default_peer)
         if not valid_tun_ip(local_ip) or not valid_tun_ip(peer_ip):
-            warn("دو IP واقعی و غیر multicast بنویسید.")
+            warn("Type two real, non-multicast IP addresses.")
             continue
         left = ipaddress.ip_address(local_ip)
         right = ipaddress.ip_address(peer_ip)
         if left.version != right.version or left == right:
-            warn("دو آدرس باید هم‌خانواده و متفاوت باشند.")
+            warn("The two addresses must be the same family and different.")
             continue
         if forwarding == "tun+ports" and (left.is_loopback or right.is_loopback):
-            warn("با tun+ports آدرس loopback قبول نمی‌شود.")
+            warn("tun+ports does not accept a loopback address.")
             continue
         break
     low = 1280 if ipaddress.ip_address(local_ip).version == 6 else 576
@@ -663,10 +663,10 @@ def ask_tun(role: str, forwarding: str) -> dict:
         "mtu": mtu,
     }
     if forwarding == "tun+ports":
-        tun["forwarding_port"] = ask_int("tun.forwarding_port (هر دو طرف یکی)", 47475, 1024, 65535)
-        print("  map و socks از روی همین پورت داخلی tun رد می‌شوند.")
+        tun["forwarding_port"] = ask_int("tun.forwarding_port (same on both sides)", 47475, 1024, 65535)
+        print("  maps and socks go through this internal tun port.")
     else:
-        print("  این حالت فقط بسته IP را رد می‌کند. map جدا لازم ندارد.")
+        print("  This mode only forwards IP packets. No separate map is needed.")
     return tun
 
 
@@ -675,26 +675,26 @@ def address_choice(role: str, transport: str, reverse: bool):
     if reverse:
         if role == "server":
             default = "[::1]:7000" if ipv6 else "127.0.0.1:7000"
-            return "آدرس dial به HTTP edge (addr)", default, False, ipv6
+            return "Dial address of the HTTP edge (addr)", default, False, ipv6
         default = "[::]:7000" if ipv6 else "0.0.0.0:7000"
-        return "آدرس listen مبدأ HTTP (addr)", default, True, ipv6
+        return "Listen address of the HTTP origin (addr)", default, True, ipv6
     if role == "server":
         default = "[::]:7000" if ipv6 else "0.0.0.0:7000"
-        return "آدرس listen تونل (addr)", default, True, ipv6
+        return "Tunnel listen address (addr)", default, True, ipv6
     default = "[::1]:7000" if ipv6 else "127.0.0.1:7000"
-    return "آدرس dial سرور (addr)", default, False, ipv6
+    return "Server dial address (addr)", default, False, ipv6
 
 
 def ask_maps() -> list:
     maps = []
-    if not ask_yes("افزودن port map", True):
+    if not ask_yes("Add a port map", True):
         return maps
     while True:
         while True:
-            kind = ask("نوع map (tcp/udp)", "tcp").lower()
+            kind = ask("map type (tcp/udp)", "tcp").lower()
             if kind in ("tcp", "udp"):
                 break
-            warn("tcp یا udp.")
+            warn("Type tcp or udp.")
         if kind == "tcp":
             bind_default, target_default = "127.0.0.1:18080", "127.0.0.1:8080"
         else:
@@ -702,37 +702,37 @@ def ask_maps() -> list:
         bind = ask_addr("bind", bind_default, bind=True, ipv6=False)
         target = ask_addr("target", target_default, bind=False, ipv6=False)
         maps.append({"type": kind, "bind": bind, "target": target})
-        if not ask_yes("map دیگر", False):
+        if not ask_yes("Another map", False):
             return maps
 
 
 def ask_socks(required: bool) -> str:
     while True:
-        value = ask("socks5 (خالی = خاموش)", "" if not required else "127.0.0.1:1080")
+        value = ask("socks5 (empty = off)", "" if not required else "127.0.0.1:1080")
         if value == "":
             if required:
-                warn("بدون map باید یک آدرس socks5 بدهید.")
+                warn("Without a map you must give a socks5 address.")
                 continue
             return ""
         if valid_endpoint(value, bind=True):
             return value
-        warn("socks5 را مثل 127.0.0.1:1080 بنویسید.")
+        warn("Type socks5 as 127.0.0.1:1080.")
 
 
 def ask_targets() -> list:
     targets = []
-    print("  allowed_targets: مقصدهایی که client اجازه دارد به آن‌ها وصل شود.")
-    print("  خالی همه‌چیز را می‌بندد. * یعنی بدون محدودیت.")
+    print("  allowed_targets: destinations this client may connect to.")
+    print("  Empty denies everything. * means no restriction.")
     while True:
         default = "127.0.0.1:8080" if not targets else ""
         value = ask("allowed_targets", default)
         if targets and value == "":
             return targets
         if value != "*" and not valid_endpoint(value, bind=False):
-            warn("مقصد را مثل 127.0.0.1:8080 یا * بنویسید.")
+            warn("Type a destination like 127.0.0.1:8080 or *.")
             continue
         targets.append(value)
-        if not ask_yes("مقصد دیگر", False):
+        if not ask_yes("Another destination", False):
             return targets
 
 
@@ -746,13 +746,13 @@ def pool_value(role: str, transport: str, reverse: bool, forwarding: str) -> int
     if not client_pool or must_be_one:
         print("  connection_pool: 1")
         if role == "server" and not reverse:
-            print("  اندازه pool را روی client تنظیم کنید.")
+            print("  Set the pool size on the client.")
         return 1
     return ask_int("connection_pool", 1, 1, 16)
 
 
 def show_summary(config: dict) -> None:
-    print("  -- خلاصه، پیش از نوشتن --")
+    print("  -- summary, before writing --")
     print(f"  mode: {config['mode']}")
     print(f"  private_key_file: {config['private_key_file']}")
     print(f"  reverse: {str(config.get('reverse', False)).lower()}")
@@ -792,17 +792,17 @@ def write_config(role: str, config: dict) -> None:
         temporary.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
         chmod_private(temporary)
         if run_bin(["--config", str(temporary), "--check"]) != 0:
-            warn("dagger-rs --check این تنظیم را نپذیرفت. فایل قبلی ماند.")
+            warn("dagger-rs --check rejected this config. The previous file was kept.")
             return
         if destination.exists():
             backup = CONFIG / f"{role}.json.backup.{time.time_ns()}"
             shutil.copy2(destination, backup)
-            print(f"  نسخه قبلی: {backup.name}")
+            print(f"  Previous copy: {backup.name}")
         os.replace(temporary, destination)
         temporary = None
         chmod_private(destination)
         claim_files(role, destination)
-        print(f"  ذخیره شد: {destination}")
+        print(f"  Saved: {destination}")
     finally:
         if temporary is not None and temporary.exists():
             temporary.unlink()
@@ -830,30 +830,30 @@ def claim_files(role: str, config_path: Path) -> None:
 
 
 def configure() -> None:
-    print("  این منو فقط dagger-rs را تنظیم می‌کند، نه DaggerConnect اصلی را.")
+    print("  This menu configures dagger-rs only, not the original DaggerConnect.")
     role = ask_role()
     if role is None:
         return
     destination = CONFIG / f"{role}.json"
     if destination.exists():
-        print(f"  فایل موجود است: {destination}")
-        if not ask_yes("برای جایگزینی yes بنویسید", False):
-            print("  فایل قبلی دست نخورده ماند.")
+        print(f"  File already exists: {destination}")
+        if not ask_yes("Type yes to replace it", False):
+            print("  The existing file was left unchanged.")
             return
     if not ensure_keys(role):
         pause()
         return
-    print("  فقط کلید عمومی رد و بدل شود.")
+    print("  Exchange public keys only.")
     while True:
-        peer = ask("کلید عمومی طرف مقابل (۶۴ hex)")
+        peer = ask("Other side public key (64 hex)")
         if valid_key(peer):
             break
-        warn("کلید باید ۶۴ رقم hex باشد و همه‌اش صفر نباشد.")
+        warn("The key must be 64 hex digits and not all zeros.")
     while True:
         reverse = False
         transport = ask_transport()
         if transport in ("xhttp", "xhttps"):
-            reverse = ask_yes("reverse برای CDN", False)
+            reverse = ask_yes("reverse for a CDN", False)
         elif transport == "tun":
             reverse = False
         fields = carrier_fields(role, transport, reverse)
@@ -866,7 +866,7 @@ def configure() -> None:
                 address = f"{host}:{raw['l4_port']}"
             else:
                 address = f"{raw['peer_ip']}:{raw['l4_port']}"
-            print(f"  addr از تنظیم raw: {address}")
+            print(f"  addr from the raw settings: {address}")
         else:
             label, default, bind, ipv6 = address_choice(role, transport, reverse)
             print(f"  {label}")
@@ -875,7 +875,7 @@ def configure() -> None:
         socks = ""
         targets = None
         if role == "server" and forwarding != "tun":
-            section("port map و socks5")
+            section("port map and socks5")
             maps = ask_maps()
             socks = ask_socks(required=not maps)
         elif role == "client" and forwarding != "tun":
@@ -906,11 +906,11 @@ def configure() -> None:
                 config["allowed_targets"] = targets
             config["paths"] = [entry]
         show_summary(config)
-        if ask_yes("ذخیره شود", True):
+        if ask_yes("Save it", True):
             write_config(role, config)
             break
-        if not ask_yes("از نو پرسیده شود", False):
-            print("  چیزی نوشته نشد.")
+        if not ask_yes("Ask again from the start", False):
+            print("  Nothing was written.")
             break
     pause()
 
@@ -919,7 +919,7 @@ def config_path(role: str) -> Path | None:
     path = CONFIG / f"{role}.json"
     if path.is_file():
         return path
-    warn(f"فایل تنظیم نیست: {path}")
+    warn(f"Config file is missing: {path}")
     return None
 
 
@@ -940,9 +940,9 @@ def do_check() -> None:
         pause()
         return
     if run_bin(["--config", str(path), "--check"]) == 0:
-        print("  بررسی قبول شد.")
+        print("  Check passed.")
     else:
-        warn("بررسی ناموفق بود.")
+        warn("Check failed.")
     pause()
 
 
@@ -954,7 +954,7 @@ def do_foreground() -> None:
     if path is None:
         pause()
         return
-    print("  اجرا در پیش‌زمینه. توقف با Ctrl+C؛ بعد منو برمی‌گردد.")
+    print("  Running in the foreground. Ctrl+C stops it; the menu returns after that.")
     tty_in = None
     try:
         tty_in = open("/dev/tty", "rb", buffering=0)
@@ -971,7 +971,7 @@ def do_foreground() -> None:
 def systemctl(args: list[str]) -> int:
     binary = shutil.which("systemctl")
     if binary is None:
-        warn("systemctl پیدا نشد.")
+        warn("systemctl was not found.")
         return 1
     command = [binary]
     if not is_root():
@@ -1009,7 +1009,7 @@ def privileged_bind(config: dict) -> bool:
 
 def install_service() -> None:
     if shutil.which("systemctl") is None:
-        warn("systemd در دسترس نیست.")
+        warn("systemd is not available.")
         pause()
         return
     role = ask_role()
@@ -1020,7 +1020,7 @@ def install_service() -> None:
         pause()
         return
     if run_bin(["--config", str(path), "--check"]) != 0:
-        warn("تا وقتی --check قبول نکند سرویس نصب نمی‌شود.")
+        warn("The service is not installed until --check accepts the config.")
         pause()
         return
     config = load_json(path)
@@ -1029,7 +1029,7 @@ def install_service() -> None:
     has_raw = any(item.get("raw") is not None for item in endpoints)
     has_low = privileged_bind(config)
     if (has_tun or has_raw or has_low) and not is_root():
-        warn("این تنظیم قابلیت سیستمی می‌خواهد. نصب سرویس را با root انجام دهید.")
+        warn("This config needs system capabilities. Install the service as root.")
         pause()
         return
     caps = []
@@ -1065,14 +1065,14 @@ def install_service() -> None:
                     "dagger-rs",
                 ]
             ).returncode != 0:
-                warn("کاربر سیستمی dagger-rs ساخته نشد.")
+                warn("The dagger-rs system user was not created.")
                 pause()
                 return
         claim_files(role, path)
         if shutil.which("runuser") is None or subprocess.run(
             ["runuser", "-u", "dagger-rs", "--", BINARY, "--config", str(path), "--check"]
         ).returncode != 0:
-            warn("کاربر سرویس نمی‌تواند تنظیم یا کلید را بخواند.")
+            warn("The service user cannot read the config or the key.")
             pause()
             return
         user_line = "User=dagger-rs"
@@ -1126,16 +1126,16 @@ def install_service() -> None:
     except OSError:
         pass
     if systemctl(["daemon-reload"]) != 0:
-        warn("daemon-reload ناموفق بود.")
+        warn("daemon-reload failed.")
         pause()
         return
     if systemctl(["enable", "--now", f"dagger-rs-{role}.service"]) != 0:
-        warn("روشن کردن سرویس ناموفق بود.")
+        warn("Starting the service failed.")
         pause()
         return
-    print(f"  سرویس dagger-rs-{role}.service روشن و برای بوت فعال شد.")
+    print(f"  Service dagger-rs-{role}.service is running and enabled at boot.")
     if not is_root():
-        print("  سرویس کاربر با بستن نشست ممکن است بایستد، مگر lingering روشن باشد.")
+        print("  A user service may stop when the session closes, unless lingering is enabled.")
     pause()
 
 
@@ -1146,7 +1146,7 @@ def service_action(action: str) -> None:
     if action == "logs":
         journal = shutil.which("journalctl")
         if journal is None:
-            warn("journalctl پیدا نشد.")
+            warn("journalctl was not found.")
             pause()
             return
         command = [journal, "-u", f"dagger-rs-{role}.service", "-n", "50", "--no-pager"]
@@ -1163,30 +1163,30 @@ def do_cert() -> None:
     if role is None:
         return
     while True:
-        name = ask("نام DNS یا IP گواهی", "localhost")
+        name = ask("Certificate DNS name or IP", "localhost")
         if re.fullmatch(r"[A-Za-z0-9_.:-]+", name or ""):
             break
-        warn("نام گواهی نامعتبر است.")
+        warn("Certificate name is invalid.")
     directory = CONFIG / f"{role}-tls"
     directory.mkdir(parents=True, exist_ok=True)
     code = run_bin(["certgen", "--out", str(directory), "--name", name])
     if code == 0:
-        print(f"  گواهی: {directory / 'cert.pem'}")
-        print("  cert.pem را به طرف مقابل بدهید. key.pem همین‌جا بماند.")
+        print(f"  Certificate: {directory / 'cert.pem'}")
+        print("  Give cert.pem to the other side. key.pem stays here.")
     else:
-        warn("ساخت گواهی ناموفق بود. فایل قبلی ماند.")
+        warn("Certificate generation failed. The previous files were kept.")
     pause()
 
 
 def ask_ports() -> str:
     while True:
-        value = ask("پورت اضافه با کاما (خالی = هیچ)", "")
+        value = ask("Extra ports, comma-separated (empty = none)", "")
         if value == "":
             return ""
         parts = value.split(",")
         if parts and all(part.isdigit() and 1 <= int(part, 10) <= 65535 for part in parts):
             return value
-        warn("پورت‌ها را مثل 443,8443 بنویسید.")
+        warn("Type ports like 443,8443.")
 
 
 def ask_ip(label: str) -> str:
@@ -1195,39 +1195,39 @@ def ask_ip(label: str) -> str:
         try:
             ipaddress.ip_address(value)
         except ValueError:
-            warn("یک IP بنویسید، بدون پورت.")
+            warn("Type one IP, without a port.")
             continue
         return value
 
 
 def do_linktest() -> None:
-    print("  تست فقط با همتا و پورتی که اینجا می‌نویسید.")
+    print("  The test uses only the peer and port you type here.")
     while True:
-        action = ask("listen یا probe", "probe").lower()
+        action = ask("listen or probe", "probe").lower()
         if action in ("listen", "probe"):
             break
-        warn("listen یا probe بنویسید.")
+        warn("Type listen or probe.")
     args = ["linktest", action]
     if action == "listen":
-        bind = ask_addr("bind محلی", "127.0.0.1:47000", bind=True, ipv6=False)
-        peer = ask_ip("IP همتای مورد انتظار")
-        wait = ask_int("مدت listen به ثانیه", 900, 1, 86400)
+        bind = ask_addr("Local bind", "127.0.0.1:47000", bind=True, ipv6=False)
+        peer = ask_ip("Expected peer IP")
+        wait = ask_int("Listen time in seconds", 900, 1, 86400)
         args += ["--bind", bind, "--peer", peer, "--wait-secs", str(wait)]
     else:
-        peer = ask_addr("آدرس همتا ip:port", "127.0.0.1:47000", bind=True, ipv6=False)
+        peer = ask_addr("Peer address ip:port", "127.0.0.1:47000", bind=True, ipv6=False)
         while True:
-            source = ask("IP مبدأ محلی (خالی = مسیر پیش‌فرض)", "")
+            source = ask("Local source IP (empty = default route)", "")
             if source == "":
                 break
             try:
                 ipaddress.ip_address(source)
             except ValueError:
-                warn("IP مبدأ نامعتبر است.")
+                warn("Source IP is invalid.")
                 continue
             break
-        local_port = ask_int("پورت برگشت (0 = آزاد)", 0, 0, 65535)
-        seconds = ask_int("مدت throughput به ثانیه", 4, 1, 3600)
-        quick = ask_yes("تست سریع", True)
+        local_port = ask_int("Return port (0 = any)", 0, 0, 65535)
+        seconds = ask_int("Throughput time in seconds", 4, 1, 3600)
+        quick = ask_yes("Quick test", True)
         args += ["--peer", peer, "--local-port", str(local_port), "--seconds", str(seconds)]
         if source:
             args += ["--bind", source]
@@ -1241,12 +1241,12 @@ def do_linktest() -> None:
 
 
 def file_state(name: str) -> str:
-    return "موجود" if (CONFIG / name).is_file() else "نیست"
+    return "present" if (CONFIG / name).is_file() else "missing"
 
 
 def title_bar() -> str:
     left = " dagger-rs"
-    right = "صفحه تنظیم تونل "
+    right = "Tunnel setup "
     gap = WIDTH - len(left) - len(right)
     text = left + (" " * max(gap, 1)) + right
     text = fit(text, WIDTH)
@@ -1260,9 +1260,9 @@ def meta_line() -> str:
     parts = [
         (f" {path}  ", DIM),
         ("server.json ", ""),
-        (server, OK if server == "موجود" else DIM),
+        (server, OK if server == "present" else DIM),
         ("   client.json ", ""),
-        (client, OK if client == "موجود" else DIM),
+        (client, OK if client == "present" else DIM),
     ]
     visible = "".join(text for text, _color in parts)
     if len(visible) > WIDTH:
@@ -1297,7 +1297,7 @@ def draw_menu(selected: str, notice: str) -> None:
         else:
             lines.append(box_row(mark + label))
     lines.append(f"{BOX}└{'─' * INNER}┘{RESET}\n")
-    hint = fit("  ↑↓ حرکت     Enter انتخاب     0 خروج", WIDTH)
+    hint = fit("  ↑↓ move     Enter select     0 exit", WIDTH)
     lines.append(DIM + hint + RESET + "\n")
     if notice:
         note = fit("  " + notice, WIDTH)
@@ -1356,17 +1356,17 @@ def selectable_ids() -> list[str]:
 
 def dispatch(choice: str) -> None:
     titles = {
-        "1": "کلید عمومی",
-        "2": "تنظیم سرور یا کلاینت",
+        "1": "Public key",
+        "2": "Configure server or client",
         "3": "dagger-rs --check",
-        "4": "اجرا در پیش‌زمینه",
-        "5": "نصب و شروع systemd",
-        "6": "وضعیت سرویس",
-        "7": "شروع دوباره",
-        "8": "توقف سرویس",
-        "9": "لاگ‌های اخیر",
-        "10": "گواهی TLS",
-        "11": "تست لینک",
+        "4": "Run in the foreground",
+        "5": "Install and start systemd",
+        "6": "Service status",
+        "7": "Restart",
+        "8": "Stop the service",
+        "9": "Recent logs",
+        "10": "TLS certificate",
+        "11": "Link test",
     }
     actions = {
         "1": do_keys,
@@ -1388,7 +1388,7 @@ def dispatch(choice: str) -> None:
     try:
         action()
     except Exception as exc:
-        warn(f"خطا: {exc}")
+        warn(f"Error: {exc}")
         pause()
 
 
@@ -1422,9 +1422,9 @@ def menu_loop() -> int:
             if choice in ids:
                 index = ids.index(choice)
             else:
-                notice = "شماره نامعتبر است."
+                notice = "That number is not on the menu."
         elif key == "bad":
-            notice = "از ↑↓ یا شماره ۰ تا ۱۱ استفاده کنید."
+            notice = "Use ↑↓ or a number from 0 to 11."
 
 
 def open_terminal_fd():
@@ -1461,16 +1461,16 @@ def main(argv: list[str] | None = None) -> int:
         print("Override DAGGER_BIN and DAGGER_CONFIG_DIR for a local directory.")
         return 0
     if args:
-        print("این برنامه منوی تعاملی است و گزینه خط فرمان ندارد.", file=sys.stderr)
+        print("This program is an interactive menu and takes no command-line options.", file=sys.stderr)
         return 2
     fd = open_terminal_fd()
     if fd is None:
-        print("ترمینال وصل نیست. منو را با این دستور باز کنید: sudo dagger-setup")
+        print("No terminal attached. Open the menu with: sudo dagger-setup")
         return 0
     try:
         import termios
     except ImportError:
-        print("این منو به ترمینال لینوکس نیاز دارد.", file=sys.stderr)
+        print("This menu needs a Linux terminal.", file=sys.stderr)
         return 1
     FD = fd
     ORIG = termios.tcgetattr(FD)
