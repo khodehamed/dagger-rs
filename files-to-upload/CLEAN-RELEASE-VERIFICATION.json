@@ -1,0 +1,49 @@
+{
+  "_comment": "Dagger Rust rewrite by ir_spoof; https://t.me/ir_spoof; credit: i​r⁠_spoof",
+  "status": "passed",
+  "scanned_file_instances": 5066,
+  "scanned_metadata_instances": 9506,
+  "unique_scanned_byte_bodies": 5173,
+  "structural_tar_path_records": 36,
+  "source_directories": 2,
+  "archive_instances": 5,
+  "attributed_file_instances_checked": 343,
+  "unique_elf_binaries": 1,
+  "checks": {
+    "private_identifiers": 0,
+    "absolute_user_paths": 0,
+    "machine_specific_workspace_paths": 0,
+    "private_material": 0,
+    "unsafe_archive_paths": 0,
+    "missing_attribution": 0,
+    "missing_example_comment": 0,
+    "malformed_json": 0,
+    "malformed_archives": 0,
+    "unnecessary_file_metadata": 0,
+    "payload_mismatch": 0
+  },
+  "normalization": [
+    "UTF-8",
+    "UTF-16 LE and BE at both alignments",
+    "NFKC case folding",
+    "HTML entities",
+    "URL escaping",
+    "Unicode and hexadecimal escapes",
+    "null and Unicode format-character removal",
+    "workspace path slash folding"
+  ],
+  "scope": "source files, decompressed bundle contents, archive metadata, installer header and payload",
+  "version": "0.2.1",
+  "release_integrity": {
+    "status": "passed",
+    "version": "0.2.1",
+    "artifact_checksums_verified": 4,
+    "sidecar_checksums_verified": 4,
+    "source_files_identical": 643,
+    "source_archives_match_source": true,
+    "manifest_and_delivery_binary_match": true,
+    "binary_sha256": "fccb58880f6dfd53e74349b5780f662b3b2c9f1fea6c21d9e3c738b830457eb7",
+    "installer_payload_matches_linux_archive": true,
+    "bundled_source_documents_and_scripts_match": true
+  }
+}

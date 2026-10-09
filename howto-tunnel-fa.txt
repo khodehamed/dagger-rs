@@ -1,0 +1,51 @@
+۲) یه تونل ساده با dagger-rs 0.2.1 بین دو سرور 🚀
+
+سناریو: سرویس روی سرور خارج، آدرس 127.0.0.1:8080 فعاله؛ می‌خوای کاربر با IP ایران و پورت 18080 بهش برسه. اینجا ایران نقش server داره و خارج نقش client. هر دو طرف باید همین نسخهٔ Rust باشن؛ با کور اصلی DaggerConnect جفت نمی‌شه.
+
+روی هر دو سرور Ubuntu/Debian با systemd و معماری x86-64، فایل dagger-rs-linux-x86_64.run رو بذار و بزن:
+
+```bash
+sudo apt update
+sudo apt install -y python3
+sudo bash dagger-rs-linux-x86_64.run
+```
+
+منو خودش باز می‌شه؛ دفعات بعد: sudo /usr/local/bin/dagger-setup
+
+اول کلیدها رو بساز تا وسط تنظیمات گیر نکنی:
+• ایران: گزینهٔ 1، بعد server
+• خارج: گزینهٔ 1، بعد client
+کلید public نمایش‌داده‌شدهٔ هرکدوم رو برای اون یکی بفرست؛ فقط public! فایل private.key روی سرور خودش بمونه.
+
+بعد روی ایران گزینهٔ 2 رو بزن و جواب‌ها رو به همین ترتیب وارد کن:
+```text
+Role: server
+Remote public key: کلید public خارج
+Transport: tcp
+Forwarding mode: ports
+Tunnel listen address: 0.0.0.0:7000
+Forwarding type: tcp
+Forwarded bind address: 0.0.0.0:18080
+Target address: 127.0.0.1:8080
+```
+
+روی خارج هم گزینهٔ 2 و این جواب‌ها:
+```text
+Role: client
+Remote public key: کلید public ایران
+Transport: tcp
+Forwarding mode: ports
+Remote server dial address: IRAN_IP:7000
+Allowed local target: 127.0.0.1:8080
+Connection pool size: 1
+```
+
+IRAN_IP رو با IP واقعی سرور ایران عوض کن. اگر سرویس خارج روی پورت دیگه‌ایه، 8080 رو هم در target ایران و هم در allowlist خارج تغییر بده.
+
+توی فایروال ایران و پنل دیتاسنتر، 7000/TCP برای اتصال سرور خارج و 18080/TCP برای کاربرها باز باشه. پورت 8080 خارج لازم نیست عمومی بشه؛ سرویسش باید واقعاً روی همون آدرس محلی فعال باشه.
+
+حالا روی هر سرور گزینهٔ 5 رو بزن و نقش همون سرور رو انتخاب کن. سرویس ساخته و روشن می‌شه و بعد از ریبوت هم خودکار میاد بالا ✅ وضعیت با گزینهٔ 6؛ لاگ‌ها با 9.
+
+تمام! اتصال به IRAN_IP:18080 می‌ره سمت سرویس خارج. اگه سرویس وب باشه، برای تست توی مرورگر باز کن: http://IRAN_IP:18080
+
+بازنویسی Rust: t.me/ir_spoof

@@ -1,0 +1,169 @@
+{
+  "_comment": "Dagger Rust rewrite by ir_spoof; https://t.me/ir_spoof; credit: i\u200br\u2060_spoof",
+  "status": "passed",
+  "version": "0.2.1",
+  "date": "2026-10-07",
+  "binary_sha256": "fccb58880f6dfd53e74349b5780f662b3b2c9f1fea6c21d9e3c738b830457eb7",
+  "binary_bytes": 7712936,
+  "full_validation": {
+    "summary": "docs/test-results/0.2.1/summary.json",
+    "checks": 33,
+    "unique_rust_tests": 60,
+    "regular_rust_tests": 59,
+    "privileged_tun_tests": 1,
+    "json_examples": 16,
+    "example_cli_groups": 8,
+    "invalid_cli_cases": 15,
+    "rust_formatting": "passed",
+    "linux_all_target_clippy_warnings_denied": "passed",
+    "bash_syntax_scripts_and_templates": 11,
+    "input_sha256": "a2119f60937d5ac13fb0d839247ad381cc2f111c2533dd431228975a70e9c588",
+    "serial_export_sha256": "8d1cff5a00a3e7c5d42ab97c89ada343c506ca574647a400593de6158accba2a"
+  },
+  "final_package_smoke": {
+    "mode": "package-only; production executable matched full validated SHA-256",
+    "checks": [
+      {
+        "name": "core-version",
+        "exit_code": 0,
+        "seconds": 0.11,
+        "status": "passed"
+      },
+      {
+        "name": "core-help",
+        "exit_code": 0,
+        "seconds": 0.13,
+        "status": "passed"
+      },
+      {
+        "name": "generated-server",
+        "exit_code": 0,
+        "seconds": 0.05,
+        "status": "passed"
+      },
+      {
+        "name": "generated-client",
+        "exit_code": 0,
+        "seconds": 0.02,
+        "status": "passed"
+      },
+      {
+        "name": "syntax-scripts-build.sh",
+        "exit_code": 0,
+        "seconds": 0.04,
+        "status": "passed"
+      },
+      {
+        "name": "syntax-scripts-export-running-core.sh",
+        "exit_code": 0,
+        "seconds": 0.03,
+        "status": "passed"
+      },
+      {
+        "name": "syntax-scripts-install.sh",
+        "exit_code": 0,
+        "seconds": 0.03,
+        "status": "passed"
+      },
+      {
+        "name": "syntax-scripts-launch.sh",
+        "exit_code": 0,
+        "seconds": 0.03,
+        "status": "passed"
+      },
+      {
+        "name": "syntax-scripts-offline-runner.sh.in",
+        "exit_code": 0,
+        "seconds": 0.03,
+        "status": "passed"
+      },
+      {
+        "name": "syntax-scripts-package-linux.sh",
+        "exit_code": 0,
+        "seconds": 0.03,
+        "status": "passed"
+      },
+      {
+        "name": "syntax-scripts-package-selfextracting.sh",
+        "exit_code": 0,
+        "seconds": 0.03,
+        "status": "passed"
+      },
+      {
+        "name": "syntax-scripts-setup.sh",
+        "exit_code": 0,
+        "seconds": 0.04,
+        "status": "passed"
+      },
+      {
+        "name": "syntax-tests-raw_vm.sh",
+        "exit_code": 0,
+        "seconds": 0.03,
+        "status": "passed"
+      },
+      {
+        "name": "syntax-tests-tun_forwarding_vm.sh",
+        "exit_code": 0,
+        "seconds": 0.03,
+        "status": "passed"
+      },
+      {
+        "name": "syntax-tests-tun_vm.sh",
+        "exit_code": 0,
+        "seconds": 0.02,
+        "status": "passed"
+      },
+      {
+        "name": "linux-package",
+        "exit_code": 0,
+        "seconds": 3.3,
+        "status": "passed"
+      },
+      {
+        "name": "offline-help",
+        "exit_code": 0,
+        "seconds": 0.04,
+        "status": "passed"
+      },
+      {
+        "name": "offline-extract",
+        "exit_code": 0,
+        "seconds": 1.2,
+        "status": "passed"
+      },
+      {
+        "name": "offline-install",
+        "exit_code": 0,
+        "seconds": 2.33,
+        "status": "passed"
+      },
+      {
+        "name": "installed-version",
+        "exit_code": 0,
+        "seconds": 0.09,
+        "status": "passed"
+      },
+      {
+        "name": "installed-menu",
+        "exit_code": 0,
+        "seconds": 0.65,
+        "status": "passed"
+      }
+    ],
+    "package_hashes": {
+      "dagger-rs-linux-x86_64.run": {
+        "sha256": "51d34306d901ea43ed5446ddee1dee5c345aabc212695246c1c5b9d1000d3f6f",
+        "bytes": 3568444
+      },
+      "dagger-rs-linux-x86_64.tar.gz": {
+        "sha256": "543199de64aac6d39d397d77f1cdf006d900d4be05721a6ba9eca2ccaa1fb26d",
+        "bytes": 3565474
+      }
+    },
+    "input_sha256": "7c54ab3fa7a92efbcb5d63db52cdee16f5ae08ffc459655e1bf14fa5d291fd39",
+    "serial_export_sha256": "57c8b765ef3b5c516904ad17db1b5bf2344a623a2ecd55a2f7b3ac88d3d529f6"
+  },
+  "isolation": "Disposable Linux VM, no network adapter; local loopback remained available. Inputs transferred through read-only CD and results through file-backed serial console.",
+  "historical_coverage": "The 70 namespace scenarios and 14 service/installer groups are documented for the separate 0.2.0 artifact in docs/testing-0.2.0.md. They were not rerun or claimed for this attribution release.",
+  "scope": "Current attribution/configuration metadata release tested locally. Independent pinned Noise framing changes original-peer interoperability; external CDN compatibility is not established."
+}

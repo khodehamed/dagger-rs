@@ -1,0 +1,33 @@
+۱) ساخت dagger-rs 0.2.1 از سورس 🛠
+
+اگه می‌خوای خودت کور رو کامپایل کنی، روی Ubuntu/Debian اینا رو بزن. فایل dagger-rs-source.zip هم توی همین پوشه باشه:
+
+```bash
+sudo apt update
+sudo apt install -y build-essential curl ca-certificates unzip python3
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+unzip dagger-rs-source.zip
+cd dagger-rs-source
+cargo build --locked --release
+./target/release/dagger-rs --version
+```
+
+توی نصب Rust همون گزینهٔ پیش‌فرض رو انتخاب کن. اگه از قبل Rust داری، به‌جای نصب دوباره بزن rustup update stable. بار اول برای نصب ابزارها و گرفتن وابستگی‌ها اینترنت لازمه؛ دستور نصب Rust از صفحهٔ رسمیشه: https://rust-lang.org/tools/install/
+
+خروجی آماده‌ست: target/release/dagger-rs ✅ برای نصب کور و باز کردن منوی تنظیمات:
+
+```bash
+sudo bash scripts/install.sh --binary target/release/dagger-rs
+sudo /usr/local/bin/dagger-setup
+```
+
+اگه خواستی از بیلد خودت فایل نصاب هم بسازی:
+
+```bash
+bash scripts/package-linux.sh target/release/dagger-rs dist
+```
+
+فایل‌های نصاب می‌رن توی dist؛ روی سرور هم‌معماری اجراشون کن. سورس و لایسنس‌ها رو هم موقع انتشار نگه دار.
+
+بازنویسی Rust: t.me/ir_spoof
