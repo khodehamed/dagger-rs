@@ -33,8 +33,41 @@ TLS_TRANSPORTS = ("https", "wss", "xhttps")
 RAW_TRANSPORTS = ("quantum", "quantum-gaming", "tun")
 RULE = "-" * 76
 TTY = None
+FD = None
+ORIG = None
+SCREEN = False
 BINARY = ""
 CONFIG = Path(".")
+WIDTH = 74
+INNER = 72
+RESET = "\033[0m"
+HEAD = "\033[1;97;44m"
+SEL = "\033[1;30;46m"
+BOX = "\033[36m"
+SEC = "\033[1;33m"
+DIM = "\033[2m"
+ERR = "\033[1;31m"
+OK = "\033[1;32m"
+LABEL = "\033[1;36m"
+
+MENU_ROWS = (
+    ("sec", "", "کلید"),
+    ("item", "1", "1   کلید عمومی این دستگاه"),
+    ("sec", "", "تنظیم"),
+    ("item", "2", "2   سرور یا کلاینت"),
+    ("item", "3", "3   بررسی    dagger-rs --check"),
+    ("sec", "", "سرویس"),
+    ("item", "4", "4   اجرا در پیش‌زمینه"),
+    ("item", "5", "5   نصب و شروع systemd"),
+    ("item", "6", "6   وضعیت سرویس"),
+    ("item", "7", "7   شروع دوباره"),
+    ("item", "8", "8   توقف سرویس"),
+    ("item", "9", "9   لاگ‌های اخیر"),
+    ("sec", "", "ابزار"),
+    ("item", "10", "10  گواهی TLS محلی"),
+    ("item", "11", "11  تست لینک با همتای مشخص"),
+    ("item", "0", "0   خروج"),
+)
 
 
 def configure_stdio() -> None:
@@ -60,38 +93,115 @@ def open_terminal():
     return None
 
 
-def read_line(prompt: str) -> str:
-    sys.stdout.write(prompt)
+def emit(text: str) -> None:
+    sys.stdout.write(text)
     sys.stdout.flush()
-    if TTY is None:
-        sys.stdout.write("\n")
+
+
+def fit(text: str, width: int) -> str:
+    if len(text) <= width:
+        return text
+    if width <= 1:
+        return text[:width]
+    return text[: width - 1] + "…"
+
+
+def cooked() -> None:
+    if FD is None or ORIG is None:
+        return
+    import termios
+
+    termios.tcsetattr(FD, termios.TCSADRAIN, ORIG)
+
+
+def cbreak() -> None:
+    import termios
+    import tty
+
+    tty.setcbreak(FD)
+
+
+def show_cursor() -> None:
+    emit("\033[?25h")
+
+
+def enter_screen() -> None:
+    global SCREEN
+    emit("\033[?1049h\033[2J\033[H")
+    SCREEN = True
+
+
+def leave_screen() -> None:
+    global SCREEN
+    if not SCREEN:
+        return
+    try:
+        cooked()
+    except Exception:
+        pass
+    try:
+        emit("\033[0m\033[?25h\033[?1049l")
+    except Exception:
+        pass
+    SCREEN = False
+
+
+def open_form(title: str) -> None:
+    show_cursor()
+    try:
+        cooked()
+    except Exception:
+        pass
+    emit("\033[2J\033[H")
+    text = fit(f" dagger-rs   {title}", WIDTH)
+    emit(HEAD + text + " " * (WIDTH - len(text)) + RESET + "\n")
+    emit(BOX + "─" * WIDTH + RESET + "\n\n")
+
+
+def read_line(prompt: str) -> str:
+    show_cursor()
+    try:
+        cooked()
+    except Exception:
+        pass
+    emit(prompt)
+    if FD is None:
+        emit("\n")
         raise SystemExit(0)
-    line = TTY.readline()
-    if line == "":
-        sys.stdout.write("\n")
-        sys.stdout.flush()
-        raise SystemExit(0)
-    return line.rstrip("\r\n")
+    chunks = []
+    while True:
+        try:
+            piece = os.read(FD, 256)
+        except OSError:
+            piece = b""
+        if piece == b"":
+            emit("\n")
+            raise SystemExit(0)
+        chunks.append(piece)
+        if b"\n" in piece or b"\r" in piece:
+            break
+    raw = b"".join(chunks)
+    return raw.split(b"\r", 1)[0].split(b"\n", 1)[0].decode("utf-8", "replace")
 
 
 def warn(message: str) -> None:
-    print(f"  ! {message}")
+    emit(f"{ERR}  ! {message}{RESET}\n")
 
 
 def section(title: str) -> None:
-    print(f"  -- {title} --")
+    emit(f"{SEC}  {title}{RESET}\n")
 
 
 def pause() -> None:
-    read_line("  Enter برای بازگشت به منو. ")
+    read_line(f"{DIM}  Enter برای بازگشت به منو.{RESET} ")
 
 
 def ask(label: str, default=None) -> str:
     if default is None:
-        prompt = f"  {label}: "
+        prompt = f"{LABEL}  {label}{RESET}: "
         use_default = False
     else:
-        prompt = f"  {label} [{default}]: "
+        prompt = f"{LABEL}  {label}{RESET} {DIM}[{default}]{RESET}: "
         use_default = True
     value = read_line(prompt)
     if value.strip() == "" and use_default:
@@ -121,8 +231,8 @@ def ask_int(label: str, default: int, low: int, high: int) -> int:
 
 
 def ask_role():
-    print("  نقش: server (شنونده) یا client (وصل‌شونده)")
-    print("  خالی = بازگشت به منو")
+    emit(f"{SEC}  نقش: server (شنونده) یا client (وصل‌شونده){RESET}\n")
+    emit(f"{DIM}  خالی = بازگشت به منو{RESET}\n")
     while True:
         value = ask("server/client").lower()
         if value == "":
@@ -1134,42 +1244,130 @@ def file_state(name: str) -> str:
     return "موجود" if (CONFIG / name).is_file() else "نیست"
 
 
-def draw_menu() -> None:
-    bold = sys.stdout.isatty()
-    title = "dagger-rs  منوی تنظیم تونل"
-    if bold:
-        title = f"\033[1m{title}\033[0m"
-    print()
-    print(RULE)
-    print(f"  {title}")
-    print(f"  تنظیمات: {CONFIG}")
-    print(f"  server.json: {file_state('server.json')}    client.json: {file_state('client.json')}")
-    print(RULE)
-    print("  کلید")
-    print("  1   کلید عمومی این دستگاه (نمایش یا ساخت)")
-    print()
-    print("  تنظیم")
-    print("  2   سرور یا کلاینت")
-    print("      transport، addr، map، کلید، pool، allowed_targets")
-    print("  3   بررسی تنظیمات با dagger-rs --check")
-    print()
-    print("  سرویس")
-    print("  4   اجرا در پیش‌زمینه")
-    print("  5   نصب و شروع systemd")
-    print("  6   وضعیت سرویس")
-    print("  7   شروع دوباره")
-    print("  8   توقف")
-    print("  9   لاگ‌های اخیر")
-    print()
-    print("  ابزار")
-    print("  10  گواهی TLS محلی")
-    print("  11  تست لینک با همتای مشخص")
-    print()
-    print("  0   خروج")
-    print(RULE)
+def title_bar() -> str:
+    left = " dagger-rs"
+    right = "صفحه تنظیم تونل "
+    gap = WIDTH - len(left) - len(right)
+    text = left + (" " * max(gap, 1)) + right
+    text = fit(text, WIDTH)
+    return HEAD + text + " " * (WIDTH - len(text)) + RESET + "\n"
+
+
+def meta_line() -> str:
+    path = fit(str(CONFIG), 28)
+    server = file_state("server.json")
+    client = file_state("client.json")
+    parts = [
+        (f" {path}  ", DIM),
+        ("server.json ", ""),
+        (server, OK if server == "موجود" else DIM),
+        ("   client.json ", ""),
+        (client, OK if client == "موجود" else DIM),
+    ]
+    visible = "".join(text for text, _color in parts)
+    if len(visible) > WIDTH:
+        visible = fit(visible, WIDTH)
+        return DIM + visible + " " * (WIDTH - len(visible)) + RESET + "\n"
+    body = []
+    for text, color in parts:
+        body.append(f"{color}{text}{RESET}" if color else text)
+    return "".join(body) + " " * (WIDTH - len(visible)) + "\n"
+
+
+def box_row(text: str, fill: str = "") -> str:
+    shown = fit(text, INNER)
+    pad = INNER - len(shown)
+    if fill:
+        inner = f"{fill}{shown}{' ' * pad}{RESET}"
+    else:
+        inner = shown + " " * pad
+    return f"{BOX}│{RESET}{inner}{BOX}│{RESET}\n"
+
+
+def draw_menu(selected: str, notice: str) -> None:
+    lines = ["\033[2J\033[H\033[?25l", title_bar(), meta_line()]
+    lines.append(f"{BOX}┌{'─' * INNER}┐{RESET}\n")
+    for kind, ident, label in MENU_ROWS:
+        if kind == "sec":
+            lines.append(box_row("  " + label, SEC))
+            continue
+        mark = "▸ " if ident == selected else "  "
+        if ident == selected:
+            lines.append(box_row(mark + label, SEL))
+        else:
+            lines.append(box_row(mark + label))
+    lines.append(f"{BOX}└{'─' * INNER}┘{RESET}\n")
+    hint = fit("  ↑↓ حرکت     Enter انتخاب     0 خروج", WIDTH)
+    lines.append(DIM + hint + RESET + "\n")
+    if notice:
+        note = fit("  " + notice, WIDTH)
+        lines.append(ERR + note + RESET + "\n")
+    else:
+        lines.append("\n")
+    emit("".join(lines))
+
+
+def read_key() -> str:
+    import select
+
+    cbreak()
+    try:
+        first = os.read(FD, 1)
+        if first == b"":
+            return "eof"
+        if first in (b"\r", b"\n"):
+            return "enter"
+        if first == b"\x1b":
+            sequence = b""
+            while select.select([FD], [], [], 0.05)[0]:
+                more = os.read(FD, 8)
+                if not more:
+                    break
+                sequence += more
+                if len(sequence) >= 6:
+                    break
+            if sequence.startswith(b"[A") or sequence.startswith(b"OA"):
+                return "up"
+            if sequence.startswith(b"[B") or sequence.startswith(b"OB"):
+                return "down"
+            return "ignore"
+        if first in b"0123456789":
+            digit = first.decode()
+            if digit == "1" and select.select([FD], [], [], 0.35)[0]:
+                nxt = os.read(FD, 1)
+                if nxt in (b"0", b"1"):
+                    return "num:" + digit + nxt.decode()
+                if nxt in (b"\r", b"\n"):
+                    return "run:1"
+            if digit == "0":
+                return "exit"
+            return "num:" + digit
+        return "bad"
+    finally:
+        try:
+            cooked()
+        except Exception:
+            pass
+
+
+def selectable_ids() -> list[str]:
+    return [ident for kind, ident, _label in MENU_ROWS if kind == "item"]
 
 
 def dispatch(choice: str) -> None:
+    titles = {
+        "1": "کلید عمومی",
+        "2": "تنظیم سرور یا کلاینت",
+        "3": "dagger-rs --check",
+        "4": "اجرا در پیش‌زمینه",
+        "5": "نصب و شروع systemd",
+        "6": "وضعیت سرویس",
+        "7": "شروع دوباره",
+        "8": "توقف سرویس",
+        "9": "لاگ‌های اخیر",
+        "10": "گواهی TLS",
+        "11": "تست لینک",
+    }
     actions = {
         "1": do_keys,
         "2": configure,
@@ -1185,8 +1383,8 @@ def dispatch(choice: str) -> None:
     }
     action = actions.get(choice)
     if action is None:
-        warn("شماره نامعتبر است. فقط 0 تا 11.")
         return
+    open_form(titles.get(choice, "dagger-rs"))
     try:
         action()
     except Exception as exc:
@@ -1194,31 +1392,96 @@ def dispatch(choice: str) -> None:
         pause()
 
 
+def menu_loop() -> int:
+    ids = selectable_ids()
+    index = 0
+    notice = ""
+    while True:
+        draw_menu(ids[index], notice)
+        key = read_key()
+        notice = ""
+        if key in ("eof", "exit"):
+            return 0
+        if key == "up":
+            index = (index - 1) % len(ids)
+        elif key == "down":
+            index = (index + 1) % len(ids)
+        elif key == "enter":
+            if ids[index] == "0":
+                return 0
+            dispatch(ids[index])
+        elif key.startswith("run:"):
+            choice = key.split(":", 1)[1]
+            if choice == "0":
+                return 0
+            if choice in ids:
+                index = ids.index(choice)
+                dispatch(choice)
+        elif key.startswith("num:"):
+            choice = key.split(":", 1)[1]
+            if choice in ids:
+                index = ids.index(choice)
+            else:
+                notice = "شماره نامعتبر است."
+        elif key == "bad":
+            notice = "از ↑↓ یا شماره ۰ تا ۱۱ استفاده کنید."
+
+
+def open_terminal_fd():
+    try:
+        return os.open("/dev/tty", os.O_RDWR)
+    except OSError:
+        pass
+    stdin = sys.stdin
+    isatty = getattr(stdin, "isatty", None)
+    if isatty is not None and isatty():
+        return stdin.fileno()
+    return None
+
+
+def attach_output(fd: int) -> None:
+    cloned = os.dup(fd)
+    sys.stdout = os.fdopen(
+        cloned,
+        "w",
+        encoding="utf-8",
+        errors="replace",
+        buffering=1,
+        closefd=True,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
-    global TTY, BINARY, CONFIG
+    global FD, ORIG, BINARY, CONFIG
     configure_stdio()
     args = list(sys.argv[1:] if argv is None else argv)
     if args and args[0] in ("-h", "--help"):
         print("Usage: dagger-setup")
-        print("Interactive dagger-rs setup. Choices are read from /dev/tty.")
+        print("Full-screen dagger-rs setup. Keys are read from /dev/tty.")
         print("Override DAGGER_BIN and DAGGER_CONFIG_DIR for a local directory.")
         return 0
     if args:
         print("این برنامه منوی تعاملی است و گزینه خط فرمان ندارد.", file=sys.stderr)
         return 2
-    terminal = open_terminal()
-    if terminal is None:
+    fd = open_terminal_fd()
+    if fd is None:
         print("ترمینال وصل نیست. منو را با این دستور باز کنید: sudo dagger-setup")
         return 0
-    TTY = terminal
+    try:
+        import termios
+    except ImportError:
+        print("این منو به ترمینال لینوکس نیاز دارد.", file=sys.stderr)
+        return 1
+    FD = fd
+    ORIG = termios.tcgetattr(FD)
+    attach_output(FD)
     BINARY = find_binary()
     CONFIG = prepare_config_dir()
-    while True:
-        draw_menu()
-        choice = read_line(" شماره> ").strip()
-        if choice == "0":
-            return 0
-        dispatch(choice)
+    try:
+        enter_screen()
+        return menu_loop()
+    finally:
+        leave_screen()
 
 
 if __name__ == "__main__":

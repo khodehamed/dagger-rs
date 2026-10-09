@@ -10,7 +10,7 @@ On each Ubuntu/Debian server, as root:
 curl -fsSL https://raw.githubusercontent.com/khodehamed/dagger-rs/main/install.sh | sudo bash
 ```
 
-The installer checks the bundle checksum, installs the binary, and opens the setup menu on your terminal. That still works from `curl | bash`, because the menu is attached to `/dev/tty` instead of the pipe. If there is no terminal, it prints one line and exits. Next time:
+The installer checks the bundle checksum, installs the binary, and opens a full-screen color setup page on your terminal. That still works from `curl | bash`, because the menu is attached to `/dev/tty` instead of the pipe. If there is no terminal, it prints one line and exits. Next time:
 
 ```bash
 sudo dagger-setup

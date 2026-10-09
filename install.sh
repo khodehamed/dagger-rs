@@ -16,7 +16,7 @@ ASSET="files-to-upload/dagger-rs-linux-x86_64.run"
 SHA256="51d34306d901ea43ed5446ddee1dee5c345aabc212695246c1c5b9d1000d3f6f"
 URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${ASSET}"
 MENU_ASSET="dagger-setup"
-MENU_SHA256="963d70cb144c1b0597b08ecb15798462ac7a33e7a49283607f9c3deba062569d"
+MENU_SHA256="cedf1ca438d9eb25121de36d09547639a4d18a43039276074f557efaeecc766a"
 MENU_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${MENU_ASSET}"
 
 if [[ "$(uname -s)" != "Linux" ]]; then
