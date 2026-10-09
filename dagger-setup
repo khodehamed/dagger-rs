@@ -36,6 +36,7 @@ TTY = None
 FD = None
 ORIG = None
 SCREEN = False
+PENDING = b""
 BINARY = ""
 CONFIG = Path(".")
 WIDTH = 74
@@ -118,7 +119,8 @@ def cbreak() -> None:
     import termios
     import tty
 
-    tty.setcbreak(FD)
+    # TCSANOW keeps keystrokes already typed. The default flush would drop them.
+    tty.setcbreak(FD, termios.TCSANOW)
 
 
 def show_cursor() -> None:
@@ -158,7 +160,28 @@ def open_form(title: str) -> None:
     emit(BOX + "─" * WIDTH + RESET + "\n\n")
 
 
+def take_available(count: int) -> bytes:
+    global PENDING
+    if PENDING:
+        chunk = PENDING[:count]
+        PENDING = PENDING[count:]
+        return chunk
+    try:
+        return os.read(FD, count)
+    except OSError:
+        return b""
+
+
+def wait_input(timeout: float) -> bool:
+    if PENDING:
+        return True
+    import select
+
+    return bool(select.select([FD], [], [], timeout)[0])
+
+
 def read_line(prompt: str) -> str:
+    global PENDING
     show_cursor()
     try:
         cooked()
@@ -168,20 +191,23 @@ def read_line(prompt: str) -> str:
     if FD is None:
         emit("\n")
         raise SystemExit(0)
-    chunks = []
-    while True:
+    while b"\n" not in PENDING and b"\r" not in PENDING:
         try:
             piece = os.read(FD, 256)
         except OSError:
             piece = b""
         if piece == b"":
-            emit("\n")
-            raise SystemExit(0)
-        chunks.append(piece)
-        if b"\n" in piece or b"\r" in piece:
+            if not PENDING:
+                emit("\n")
+                raise SystemExit(0)
             break
-    raw = b"".join(chunks)
-    return raw.split(b"\r", 1)[0].split(b"\n", 1)[0].decode("utf-8", "replace")
+        PENDING += piece
+    for sep in (b"\r\n", b"\n", b"\r"):
+        if sep in PENDING:
+            line, _, PENDING = PENDING.partition(sep)
+            return line.decode("utf-8", "replace")
+    line, PENDING = PENDING, b""
+    return line.decode("utf-8", "replace")
 
 
 def warn(message: str) -> None:
@@ -209,15 +235,84 @@ def ask(label: str, default=None) -> str:
     return value.strip()
 
 
-def ask_yes(label: str, default: bool = False) -> bool:
-    shown = "yes" if default else "no"
+def draw_choices(title: str, options: list, index: int, notice: str, allow_cancel: bool, preamble: str) -> None:
+    lines = ["\033[2J\033[H\033[?25l"]
+    text = fit(f" dagger-rs   {title}", WIDTH)
+    lines.append(HEAD + text + " " * (WIDTH - len(text)) + RESET + "\n")
+    lines.append(BOX + "─" * WIDTH + RESET + "\n")
+    if preamble:
+        lines.append("\n")
+        for raw in preamble.splitlines():
+            lines.append("  " + fit(raw, WIDTH - 2) + "\n")
+    lines.append("\n")
+    lines.append(f"{BOX}┌{'─' * INNER}┐{RESET}\n")
+    for number, (_value, label) in enumerate(options, start=1):
+        mark = "▸ " if number - 1 == index else "  "
+        row = f"{mark}{number:<2}  {label}"
+        if number - 1 == index:
+            lines.append(box_row(row, SEL))
+        else:
+            lines.append(box_row(row))
+    lines.append(f"{BOX}└{'─' * INNER}┘{RESET}\n")
+    hint = "  ↑↓ move     Enter select     number chooses"
+    if allow_cancel:
+        hint += "     0 back"
+    lines.append(DIM + fit(hint, WIDTH) + RESET + "\n")
+    if notice:
+        lines.append(ERR + fit("  " + notice, WIDTH) + RESET + "\n")
+    else:
+        lines.append("\n")
+    emit("".join(lines))
+
+
+def choose(title: str, options: list, default: int = 0, allow_cancel: bool = False, preamble: str = ""):
+    index = default if 0 <= default < len(options) else 0
+    notice = ""
     while True:
-        value = ask(f"{label} (yes/no)", shown).lower()
-        if value in ("yes", "y"):
-            return True
-        if value in ("no", "n"):
-            return False
-        warn("Type yes or no.")
+        draw_choices(title, options, index, notice, allow_cancel, preamble)
+        key = read_key()
+        notice = ""
+        if key == "eof":
+            raise SystemExit(0)
+        if key == "exit":
+            if allow_cancel:
+                return None
+            notice = "That number is not in the list."
+            continue
+        if key == "up":
+            index = (index - 1) % len(options)
+        elif key == "down":
+            index = (index + 1) % len(options)
+        elif key == "enter":
+            return options[index][0]
+        elif key.startswith("run:") or key.startswith("num:"):
+            number = key.split(":", 1)[1]
+            if not number.isdigit():
+                notice = "That number is not in the list."
+                continue
+            picked = int(number, 10) - 1
+            if not 0 <= picked < len(options):
+                notice = "That number is not in the list."
+                continue
+            if key.startswith("run:"):
+                return options[picked][0]
+            index = picked
+        elif key == "bad":
+            notice = "Use ↑↓ or a number from the list."
+
+
+def choose_yes(title: str, default: bool = False, preamble: str = "") -> bool:
+    result = choose(
+        title,
+        [(True, "Yes"), (False, "No")],
+        default=0 if default else 1,
+        preamble=preamble,
+    )
+    return bool(result)
+
+
+def ask_yes(label: str, default: bool = False) -> bool:
+    return choose_yes(label, default)
 
 
 def ask_int(label: str, default: int, low: int, high: int) -> int:
@@ -231,15 +326,16 @@ def ask_int(label: str, default: int, low: int, high: int) -> int:
 
 
 def ask_role():
-    emit(f"{SEC}  Role: server (listens) or client (connects){RESET}\n")
-    emit(f"{DIM}  Empty = back to the menu{RESET}\n")
-    while True:
-        value = ask("server/client").lower()
-        if value == "":
-            return None
-        if value in ("server", "client"):
-            return value
-        warn("Type server or client.")
+    return choose(
+        "Role",
+        [
+            ("server", "Server  (this machine listens)"),
+            ("client", "Client  (this machine connects)"),
+        ],
+        default=0,
+        allow_cancel=True,
+        preamble="1 Server, 2 Client. Enter selects the highlighted row.",
+    )
 
 
 def is_root() -> bool:
@@ -441,15 +537,13 @@ def presents_certificate(role: str, reverse: bool) -> bool:
 
 
 def ask_transport() -> str:
-    print("  transport:")
-    print("    tcp   kcp   http   https   ws   wss")
-    print("    xhttp   xhttps   dc6")
-    print("    quantum   quantum+   quantum-gaming   tun")
-    while True:
-        value = ask("transport", "tcp")
-        if value in TRANSPORTS:
-            return value
-        warn("Type one of the transports above.")
+    options = [(name, name) for name in TRANSPORTS]
+    return choose(
+        "Transport",
+        options,
+        default=0,
+        preamble="Enter keeps tcp.",
+    )
 
 
 def ask_http_path() -> str:
@@ -467,11 +561,13 @@ def ask_xhttp(role: str, reverse: bool) -> dict:
             print("  This logical server dials the HTTP edge. maps and socks stay here.")
         else:
             print("  This logical client listens as the origin. allowed_targets stay here.")
-    while True:
-        mode = ask("xhttp mode (stream-up/packet-up/auto)", default_mode)
-        if mode in ("stream-up", "packet-up", "auto"):
-            break
-        warn("Type stream-up, packet-up, or auto.")
+    modes = [("stream-up", "stream-up"), ("packet-up", "packet-up"), ("auto", "auto")]
+    mode = choose(
+        "xhttp mode",
+        modes,
+        default=modes.index((default_mode, default_mode)),
+        preamble="Enter keeps the highlighted mode.",
+    )
     options = {"mode": mode}
     dialer = (role == "client" and not reverse) or (role == "server" and reverse)
     if dialer:
@@ -494,6 +590,29 @@ def ask_tls(role: str, transport: str, reverse: bool, authority: str) -> dict:
     directory.mkdir(parents=True, exist_ok=True)
     fields = {}
     if presents_certificate(role, reverse):
+        how = choose(
+            "TLS certificate",
+            [
+                ("generate", "Generate a local certificate"),
+                ("files", "Use PEM files I already have"),
+            ],
+            default=0,
+            preamble="Enter generates cert.pem and key.pem in the config directory.",
+        )
+        if how == "generate":
+            while True:
+                name = ask("Certificate name", "localhost")
+                if re.fullmatch(r"[A-Za-z0-9_.:-]+", name or ""):
+                    break
+                warn("Certificate name is invalid.")
+            code = run_bin(["certgen", "--out", str(directory), "--name", name])
+            if code != 0 or not (directory / "cert.pem").is_file() or not (directory / "key.pem").is_file():
+                warn("Certificate generation failed. Choose existing PEM files.")
+                how = "files"
+        if how == "generate":
+            fields["cert_file"] = f"{role}-tls/cert.pem"
+            fields["key_file"] = f"{role}-tls/key.pem"
+            return fields
         while True:
             certificate = ask("Server cert.pem file")
             key = ask("Server key.pem file")
@@ -537,12 +656,13 @@ def valid_ipv4(value: str, allow_empty: bool = False) -> bool:
 
 
 def ask_raw(role: str) -> dict:
-    print("  Raw packet: real peer, interface, and outer port.")
-    while True:
-        profile = ask("raw profile (tcp/udp/icmp/gre/ipip/bip/raw)", "tcp")
-        if profile in ("tcp", "udp", "icmp", "gre", "ipip", "bip", "raw"):
-            break
-        warn("Type one of the profiles above.")
+    profiles = ["tcp", "udp", "icmp", "gre", "ipip", "bip", "raw"]
+    profile = choose(
+        "Raw profile",
+        [(name, name) for name in profiles],
+        default=0,
+        preamble="Real peer, interface, and outer port. Enter keeps tcp.",
+    )
     peer_role = "client" if role == "server" else "server"
     while True:
         peer = ask(f"Real {peer_role} IPv4")
@@ -560,11 +680,12 @@ def ask_raw(role: str) -> dict:
             break
         warn("Interface name is invalid.")
     port = ask_int("Outer port (same on both sides)", 443, 1, 65535)
-    while True:
-        mode = ask("IP mode (normal/spoof/dcpi)", "normal")
-        if mode in ("normal", "spoof", "dcpi"):
-            break
-        warn("Type normal, spoof, or dcpi.")
+    mode = choose(
+        "IP mode",
+        [("normal", "normal"), ("spoof", "spoof"), ("dcpi", "dcpi")],
+        default=0,
+        preamble="Enter keeps normal.",
+    )
     source = ""
     dest = ""
     if mode == "spoof":
@@ -608,17 +729,20 @@ def carrier_fields(role: str, transport: str, reverse: bool) -> dict:
 
 
 def ask_forwarding(transport: str) -> str:
-    default = "tun" if transport == "tun" else "ports"
-    print("  forwarding: ports (port forward)  tun  tun+ports")
-    while True:
-        mode = ask("forwarding", default)
-        if mode not in ("ports", "tun", "tun+ports"):
-            warn("Type ports, tun, or tun+ports.")
-            continue
-        if transport == "tun" and mode == "ports":
-            warn("The tun carrier only works with tun or tun+ports.")
-            continue
-        return mode
+    options = [
+        ("ports", "Port forward"),
+        ("tun", "TUN device"),
+        ("tun+ports", "TUN and port forward"),
+    ]
+    default = 0
+    if transport == "tun":
+        options = options[1:]
+    return choose(
+        "What should the tunnel carry?",
+        options,
+        default=default,
+        preamble="Enter keeps the highlighted row.",
+    )
 
 
 def valid_tun_ip(value: str) -> bool:
@@ -675,64 +799,120 @@ def address_choice(role: str, transport: str, reverse: bool):
     if reverse:
         if role == "server":
             default = "[::1]:7000" if ipv6 else "127.0.0.1:7000"
-            return "Dial address of the HTTP edge (addr)", default, False, ipv6
+            return "HTTP edge address", default, False, ipv6
         default = "[::]:7000" if ipv6 else "0.0.0.0:7000"
-        return "Listen address of the HTTP origin (addr)", default, True, ipv6
+        return "HTTP origin listen address", default, True, ipv6
     if role == "server":
         default = "[::]:7000" if ipv6 else "0.0.0.0:7000"
-        return "Tunnel listen address (addr)", default, True, ipv6
+        return "Listen address", default, True, ipv6
     default = "[::1]:7000" if ipv6 else "127.0.0.1:7000"
-    return "Server dial address (addr)", default, False, ipv6
+    return "Server address", default, False, ipv6
+
+
+def default_tcp_map() -> dict:
+    return {"type": "tcp", "bind": "0.0.0.0:18080", "target": "127.0.0.1:8080"}
+
+
+def ask_one_map(kind: str) -> dict:
+    if kind == "tcp":
+        bind_default, target_default = "0.0.0.0:18080", "127.0.0.1:8080"
+    else:
+        bind_default, target_default = "0.0.0.0:15353", "127.0.0.1:5353"
+    bind = ask_addr("Public address", bind_default, bind=True, ipv6=False)
+    target = ask_addr("Service address", target_default, bind=False, ipv6=False)
+    return {"type": kind, "bind": bind, "target": target}
+
+
+def ask_port_numbers() -> dict:
+    public = ask_int("Public port on 0.0.0.0", 18080, 1, 65535)
+    service = ask_int("Service port on 127.0.0.1", 8080, 1, 65535)
+    return {"type": "tcp", "bind": f"0.0.0.0:{public}", "target": f"127.0.0.1:{service}"}
 
 
 def ask_maps() -> list:
+    kind = choose(
+        "Port map",
+        [
+            ("default", "TCP  0.0.0.0:18080 -> 127.0.0.1:8080"),
+            ("ports", "TCP, change the two ports"),
+            ("custom", "TCP, type both addresses"),
+            ("udp", "UDP map"),
+            ("several", "More than one map"),
+            ("none", "No port map"),
+        ],
+        default=0,
+        preamble="Enter uses one TCP map. 2 changes the ports.",
+    )
+    if kind == "default":
+        return [default_tcp_map()]
+    if kind == "none":
+        return []
+    if kind == "ports":
+        return [ask_port_numbers()]
+    if kind == "custom":
+        return [ask_one_map("tcp")]
+    if kind == "udp":
+        return [ask_one_map("udp")]
     maps = []
-    if not ask_yes("Add a port map", True):
-        return maps
     while True:
-        while True:
-            kind = ask("map type (tcp/udp)", "tcp").lower()
-            if kind in ("tcp", "udp"):
-                break
-            warn("Type tcp or udp.")
-        if kind == "tcp":
-            bind_default, target_default = "127.0.0.1:18080", "127.0.0.1:8080"
-        else:
-            bind_default, target_default = "127.0.0.1:15353", "127.0.0.1:5353"
-        bind = ask_addr("bind", bind_default, bind=True, ipv6=False)
-        target = ask_addr("target", target_default, bind=False, ipv6=False)
-        maps.append({"type": kind, "bind": bind, "target": target})
-        if not ask_yes("Another map", False):
+        step = choose(
+            "Add a map",
+            [
+                ("tcp", "TCP, type both addresses"),
+                ("udp", "UDP, type both addresses"),
+                ("done", "Done"),
+            ],
+            default=0 if not maps else 2,
+            preamble="Enter adds a TCP map until you choose Done.",
+        )
+        if step == "done":
             return maps
+        maps.append(ask_one_map(step))
 
 
 def ask_socks(required: bool) -> str:
-    while True:
-        value = ask("socks5 (empty = off)", "" if not required else "127.0.0.1:1080")
-        if value == "":
-            if required:
-                warn("Without a map you must give a socks5 address.")
-                continue
+    if not required:
+        enabled = choose(
+            "SOCKS proxy",
+            [(False, "Off"), (True, "On, 127.0.0.1:1080")],
+            default=0,
+            preamble="Enter leaves SOCKS off.",
+        )
+        if not enabled:
             return ""
+    else:
+        emit("  No port map, so a SOCKS address is required.\n")
+    while True:
+        value = ask("SOCKS address", "127.0.0.1:1080")
         if valid_endpoint(value, bind=True):
             return value
-        warn("Type socks5 as 127.0.0.1:1080.")
+        warn("Type a SOCKS address as 127.0.0.1:1080.")
 
 
 def ask_targets() -> list:
+    scope = choose(
+        "Destinations",
+        [
+            ("map", "127.0.0.1:8080, the default map service"),
+            ("other", "A different service address"),
+            ("any", "Any destination (*)"),
+        ],
+        default=0,
+        preamble="Enter fills allowed_targets from the default port map.",
+    )
+    if scope == "map":
+        return ["127.0.0.1:8080"]
+    if scope == "any":
+        return ["*"]
     targets = []
-    print("  allowed_targets: destinations this client may connect to.")
-    print("  Empty denies everything. * means no restriction.")
     while True:
-        default = "127.0.0.1:8080" if not targets else ""
-        value = ask("allowed_targets", default)
-        if targets and value == "":
-            return targets
+        default = "127.0.0.1:8080" if not targets else None
+        value = ask("Service address", default)
         if value != "*" and not valid_endpoint(value, bind=False):
-            warn("Type a destination like 127.0.0.1:8080 or *.")
+            warn("Type a destination like 127.0.0.1:8080.")
             continue
         targets.append(value)
-        if not ask_yes("Another destination", False):
+        if not choose_yes("Add another service address?", False):
             return targets
 
 
@@ -751,36 +931,35 @@ def pool_value(role: str, transport: str, reverse: bool, forwarding: str) -> int
     return ask_int("connection_pool", 1, 1, 16)
 
 
-def show_summary(config: dict) -> None:
-    print("  -- summary, before writing --")
-    print(f"  mode: {config['mode']}")
-    print(f"  private_key_file: {config['private_key_file']}")
-    print(f"  reverse: {str(config.get('reverse', False)).lower()}")
+def show_summary(config: dict) -> str:
+    lines = ["Enter saves this config."]
+    lines.append(f"mode: {config['mode']}")
+    lines.append(f"reverse: {str(config.get('reverse', False)).lower()}")
     if config["mode"] == "server":
-        print(f"  peer_public_keys: {config['peer_public_keys'][0]}")
         listener = config["listeners"][0]
-        print(f"  listen/dial addr: {listener['addr']}")
-        print(f"  transport: {listener.get('transport', 'tcp')}")
-        print(f"  connection_pool: {listener.get('connection_pool', 1)}")
+        lines.append(f"transport: {listener.get('transport', 'tcp')}")
+        lines.append(f"addr: {listener['addr']}")
+        lines.append(f"connection_pool: {listener.get('connection_pool', 1)}")
         for item in listener.get("maps", []):
-            print(f"  map {item['type']}: {item['bind']} -> {item['target']}")
+            lines.append(f"map {item['type']}: {item['bind']} -> {item['target']}")
         if config.get("socks5"):
-            print(f"  socks5: {config['socks5']}")
+            lines.append(f"socks5: {config['socks5']}")
+        lines.append(f"peer_public_keys: {config['peer_public_keys'][0]}")
     else:
         path = config["paths"][0]
-        print(f"  server addr: {path['addr']}")
-        print(f"  transport: {path.get('transport', 'tcp')}")
-        print(f"  server_public_key: {path['server_public_key']}")
-        print(f"  connection_pool: {path.get('connection_pool', 1)}")
+        lines.append(f"transport: {path.get('transport', 'tcp')}")
+        lines.append(f"addr: {path['addr']}")
+        lines.append(f"connection_pool: {path.get('connection_pool', 1)}")
         for target in config.get("allowed_targets", []):
-            print(f"  allowed_targets: {target}")
+            lines.append(f"allowed_targets: {target}")
+        lines.append(f"server_public_key: {path['server_public_key']}")
+    lines.append(f"private_key_file: {config['private_key_file']}")
     if "tun" in config:
         tun = config["tun"]
-        print(
-            f"  tun: {tun['name']} {tun['address']} -> {tun['peer_address']} mtu {tun['mtu']}"
-        )
+        lines.append(f"tun: {tun['name']} {tun['address']} -> {tun['peer_address']} mtu {tun['mtu']}")
         if "forwarding_port" in tun:
-            print(f"  tun.forwarding_port: {tun['forwarding_port']}")
+            lines.append(f"tun.forwarding_port: {tun['forwarding_port']}")
+    return "\n".join(lines)
 
 
 def write_config(role: str, config: dict) -> None:
@@ -830,20 +1009,25 @@ def claim_files(role: str, config_path: Path) -> None:
 
 
 def configure() -> None:
-    print("  This menu configures dagger-rs only, not the original DaggerConnect.")
     role = ask_role()
     if role is None:
         return
     destination = CONFIG / f"{role}.json"
     if destination.exists():
-        print(f"  File already exists: {destination}")
-        if not ask_yes("Type yes to replace it", False):
-            print("  The existing file was left unchanged.")
+        replace = choose(
+            "Replace the existing file?",
+            [(True, "Yes, replace it"), (False, "No, keep the current file")],
+            default=1,
+            preamble=f"{destination}\n1 replaces it. 2 or Enter keeps it.",
+        )
+        if not replace:
+            emit("  The existing file was left unchanged.\n")
+            pause()
             return
     if not ensure_keys(role):
         pause()
         return
-    print("  Exchange public keys only.")
+    emit("  Send only the public key to the other side.\n")
     while True:
         peer = ask("Other side public key (64 hex)")
         if valid_key(peer):
@@ -905,12 +1089,16 @@ def configure() -> None:
             if targets is not None:
                 config["allowed_targets"] = targets
             config["paths"] = [entry]
-        show_summary(config)
-        if ask_yes("Save it", True):
+        if choose(
+            "Save this config?",
+            [(True, "Save"), (False, "Do not save")],
+            default=0,
+            preamble=show_summary(config),
+        ):
             write_config(role, config)
             break
-        if not ask_yes("Ask again from the start", False):
-            print("  Nothing was written.")
+        if not choose_yes("Start over?", False):
+            emit("  Nothing was written.\n")
             break
     pause()
 
@@ -1201,12 +1389,12 @@ def ask_ip(label: str) -> str:
 
 
 def do_linktest() -> None:
-    print("  The test uses only the peer and port you type here.")
-    while True:
-        action = ask("listen or probe", "probe").lower()
-        if action in ("listen", "probe"):
-            break
-        warn("Type listen or probe.")
+    action = choose(
+        "Link test",
+        [("probe", "Probe the peer"), ("listen", "Wait for a peer")],
+        default=0,
+        preamble="Uses only the peer and port you enter next. Enter probes.",
+    )
     args = ["linktest", action]
     if action == "listen":
         bind = ask_addr("Local bind", "127.0.0.1:47000", bind=True, ipv6=False)
@@ -1308,19 +1496,17 @@ def draw_menu(selected: str, notice: str) -> None:
 
 
 def read_key() -> str:
-    import select
-
     cbreak()
     try:
-        first = os.read(FD, 1)
+        first = take_available(1)
         if first == b"":
             return "eof"
         if first in (b"\r", b"\n"):
             return "enter"
         if first == b"\x1b":
             sequence = b""
-            while select.select([FD], [], [], 0.05)[0]:
-                more = os.read(FD, 8)
+            while wait_input(0.05):
+                more = take_available(8)
                 if not more:
                     break
                 sequence += more
@@ -1333,9 +1519,9 @@ def read_key() -> str:
             return "ignore"
         if first in b"0123456789":
             digit = first.decode()
-            if digit == "1" and select.select([FD], [], [], 0.35)[0]:
-                nxt = os.read(FD, 1)
-                if nxt in (b"0", b"1"):
+            if digit == "1" and wait_input(0.35):
+                nxt = take_available(1)
+                if nxt in (b"0", b"1", b"2", b"3"):
                     return "num:" + digit + nxt.decode()
                 if nxt in (b"\r", b"\n"):
                     return "run:1"
