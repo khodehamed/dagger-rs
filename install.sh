@@ -1,23 +1,24 @@
 #!/usr/bin/env bash
 # dagger-rs 0.2.1 — one-line install (Linux x86_64, root):
 #
-#   curl -fsSL https://raw.githubusercontent.com/khodehamed/dagger-rs/main/install.sh | sudo bash
+#   curl -fsSL https://cdn.jsdelivr.net/gh/khodehamed/dagger-rs@main/install.sh | sudo bash
 #
 # The .run bundle reads its payload from its own file, so it is saved to disk
 # and checked before it runs. It is not executed from a pipe.
 # curl|bash leaves this script's stdin on the pipe. The bundle is started with
 # --no-setup so its old menu cannot read that pipe, then the new menu is
 # installed and attached to /dev/tty.
+# Some networks drop GitHub TLS. Each file is tried from jsDelivr, then GitHub,
+# until the bytes match the checksum. Existing /etc/dagger-rs files are kept.
 set -euo pipefail
 
 REPO="khodehamed/dagger-rs"
 BRANCH="main"
 ASSET="files-to-upload/dagger-rs-linux-x86_64.run"
 SHA256="51d34306d901ea43ed5446ddee1dee5c345aabc212695246c1c5b9d1000d3f6f"
-URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${ASSET}"
 MENU_ASSET="dagger-setup"
 MENU_SHA256="db5efd78f15d3a8781733b4e531ad3f5fd2c615137f2462e69face24780de959"
-MENU_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${MENU_ASSET}"
+INSTALL_URL="https://cdn.jsdelivr.net/gh/${REPO}@${BRANCH}/install.sh"
 
 if [[ "$(uname -s)" != "Linux" ]]; then
   echo "This installer supports Linux only." >&2
@@ -29,7 +30,7 @@ if [[ "$(uname -m)" != "x86_64" ]]; then
 fi
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run as root:" >&2
-  echo "  curl -fsSL https://raw.githubusercontent.com/${REPO}/${BRANCH}/install.sh | sudo bash" >&2
+  echo "  curl -fsSL ${INSTALL_URL} | sudo bash" >&2
   exit 1
 fi
 
@@ -53,14 +54,42 @@ menu_tmp="$(mktemp)"
 cleanup() { rm -f -- "$tmp" "$menu_tmp"; }
 trap cleanup EXIT
 
+fetch_checked() {
+  local dest="$1"
+  local sum="$2"
+  shift 2
+  local url
+  local -a curl_args
+  curl_args=(-4 --http1.1 --retry 5 --retry-delay 2 --connect-timeout 20 --max-time 180 -fL)
+  if curl --help all 2>/dev/null | grep -q -- '--retry-all-errors'; then
+    curl_args+=(--retry-all-errors)
+  fi
+  for url in "$@"; do
+    echo "Trying ${url}"
+    rm -f -- "$dest"
+    if curl "${curl_args[@]}" "$url" -o "$dest" \
+      && [[ -s "$dest" ]] \
+      && echo "${sum}  ${dest}" | sha256sum --check --status; then
+      return 0
+    fi
+    echo "Download failed: ${url}" >&2
+  done
+  echo "Could not download a file that matches the checksum." >&2
+  return 1
+}
+
 echo "Downloading ${ASSET}"
-curl -fL --retry 3 --connect-timeout 20 --max-time 180 "$URL" -o "$tmp"
-echo "${SHA256}  ${tmp}" | sha256sum --check --status
+fetch_checked "$tmp" "$SHA256" \
+  "https://cdn.jsdelivr.net/gh/${REPO}@${BRANCH}/${ASSET}" \
+  "https://github.com/${REPO}/raw/${BRANCH}/${ASSET}" \
+  "https://raw.githubusercontent.com/${REPO}/${BRANCH}/${ASSET}"
 chmod 0755 "$tmp"
 
 echo "Downloading setup menu"
-curl -fL --retry 3 --connect-timeout 20 --max-time 60 "$MENU_URL" -o "$menu_tmp"
-echo "${MENU_SHA256}  ${menu_tmp}" | sha256sum --check --status
+fetch_checked "$menu_tmp" "$MENU_SHA256" \
+  "https://cdn.jsdelivr.net/gh/${REPO}@${BRANCH}/${MENU_ASSET}" \
+  "https://github.com/${REPO}/raw/${BRANCH}/${MENU_ASSET}" \
+  "https://raw.githubusercontent.com/${REPO}/${BRANCH}/${MENU_ASSET}"
 
 # Redirect stdin so the rest of this piped script is not eaten as menu input.
 if [[ "$have_tty" == yes ]]; then
